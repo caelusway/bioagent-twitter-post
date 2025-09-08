@@ -1,0 +1,22 @@
+# Environment variables
+.env
+
+# System files
+.DS_Store
+
+# Dependencies
+node_modules/
+package-lock.json
+
+# Logs
+logs/
+*.log
+
+# Database files (legacy)
+processed_ids.json
+processed_ids_backup.json
+twitter_answers.json
+
+# Temporary files
+*.tmp
+*.temp

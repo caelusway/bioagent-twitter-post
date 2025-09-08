@@ -1,0 +1,26 @@
+{
+  "name": "bioagent-twitter-post",
+  "version": "1.0.0",
+  "description": "Automated Twitter bot that polls PostgreSQL database for bioagent answers and posts replies",
+  "main": "twitter_bot.js",
+  "scripts": {
+    "start": "node twitter_bot.js",
+    "read-db": "node index.js",
+    "migrate": "node scripts/migrate_processed_ids.js",
+    "update-schema": "node scripts/update_schema.js",
+    "check-schema": "node scripts/check_schema.js",
+    "test-db": "node scripts/test_database.js",
+    "test-dual-db": "node scripts/test_dual_database.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "dotenv": "^17.2.2",
+    "node-telegram-bot-api": "^0.66.0",
+    "pg": "^8.16.3",
+    "telegram": "^2.26.22",
+    "twitter-api-v2": "^1.27.0"
+  }
+}
