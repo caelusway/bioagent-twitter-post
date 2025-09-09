@@ -128,6 +128,7 @@ This provides comprehensive analytics and tracking of all bot activities.
 - 🚀 **Performance**: Railway database optimized for high-frequency writes  
 - 📊 **Analytics**: Dedicated database for bot metrics and monitoring
 - 🔄 **Scalability**: Independent scaling of storage and processing databases
+- 🛡️ **Resilience**: Automatic connection recovery and error handling
 
 ## Logging
 
@@ -141,8 +142,12 @@ The bot creates comprehensive logs in the `logs/` directory:
 - 2-second delay between posts to avoid Twitter rate limits
 - Processes records sequentially to maintain order
 
-## Error Handling
+## Error Handling & Resilience
 
-- Skips records if original tweet is deleted
-- Continues processing other records if one fails
-- Logs all errors with full context for debugging
+- **Database Connection Recovery**: Automatically reconnects on connection drops
+- **Retry Logic**: Up to 3 retry attempts with exponential backoff
+- **Connection Health Monitoring**: Real-time tracking of database connection status
+- **Graceful Error Handling**: Skips records if original tweet is deleted
+- **Process Resilience**: Global error handlers prevent crashes
+- **Comprehensive Logging**: All errors logged with full context for debugging
+- **Dual Database Isolation**: Main database issues don't affect tracking database

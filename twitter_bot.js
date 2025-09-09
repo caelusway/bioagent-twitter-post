@@ -6,17 +6,30 @@ const path = require('path');
 
 class TwitterBot {
     constructor() {
-        // Main PostgreSQL client for twitter_answers polling (original database)
-        this.pgClient = new Client({
+        // Connection configuration
+        this.mainDbConfig = {
             connectionString: process.env.POSTGRES_URL,
-            ssl: false
-        });
+            ssl: false,
+            connectionTimeoutMillis: 10000,
+            idleTimeoutMillis: 30000,
+            max: 1
+        };
         
-        // Railway PostgreSQL client for processed_records storage only
-        this.railwayClient = new Client({
+        this.railwayDbConfig = {
             connectionString: process.env.RAILWAY_POSTGRES_URL,
-            ssl: { rejectUnauthorized: false }
-        });
+            ssl: { rejectUnauthorized: false },
+            connectionTimeoutMillis: 10000,
+            idleTimeoutMillis: 30000,
+            max: 1
+        };
+        
+        // Initialize clients
+        this.pgClient = null;
+        this.railwayClient = null;
+        this.connectionStatus = {
+            main: false,
+            railway: false
+        };
         
         // Twitter client
         this.twitterClient = new TwitterApi({
@@ -271,14 +284,88 @@ class TwitterBot {
         }
     }
 
+    async createDatabaseConnection(config, name) {
+        const client = new Client(config);
+        
+        // Add error handlers
+        client.on('error', (err) => {
+            this.log('ERROR', `Database connection error (${name})`, {
+                error: err.message,
+                code: err.code
+            });
+            this.connectionStatus[name.toLowerCase()] = false;
+        });
+        
+        client.on('end', () => {
+            this.log('WARN', `Database connection ended (${name})`);
+            this.connectionStatus[name.toLowerCase()] = false;
+        });
+        
+        return client;
+    }
+
+    async ensureConnection(client, config, name) {
+        if (!client || client._ending || !this.connectionStatus[name.toLowerCase()]) {
+            this.log('INFO', `Reconnecting to ${name} database...`);
+            
+            try {
+                if (client && !client._ending) {
+                    await client.end();
+                }
+            } catch (err) {
+                // Ignore errors when closing
+            }
+            
+            const newClient = await this.createDatabaseConnection(config, name);
+            await newClient.connect();
+            this.connectionStatus[name.toLowerCase()] = true;
+            this.log('SUCCESS', `Reconnected to ${name} database`);
+            
+            return newClient;
+        }
+        
+        return client;
+    }
+
+    async executeQuery(client, config, name, query, params = []) {
+        let attempts = 0;
+        const maxAttempts = 3;
+        
+        while (attempts < maxAttempts) {
+            try {
+                client = await this.ensureConnection(client, config, name);
+                const result = await client.query(query, params);
+                return { client, result };
+            } catch (error) {
+                attempts++;
+                this.log('WARN', `Query attempt ${attempts} failed (${name})`, {
+                    error: error.message,
+                    code: error.code
+                });
+                
+                if (attempts >= maxAttempts) {
+                    throw error;
+                }
+                
+                // Wait before retry
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempts));
+                this.connectionStatus[name.toLowerCase()] = false;
+            }
+        }
+    }
+
     async connect() {
         try {
             // Connect to main database for twitter_answers polling
+            this.pgClient = await this.createDatabaseConnection(this.mainDbConfig, 'Main');
             await this.pgClient.connect();
+            this.connectionStatus.main = true;
             this.log('SUCCESS', 'Connected to main PostgreSQL database (twitter_answers)');
             
             // Connect to Railway database for processed_records storage
+            this.railwayClient = await this.createDatabaseConnection(this.railwayDbConfig, 'Railway');
             await this.railwayClient.connect();
+            this.connectionStatus.railway = true;
             this.log('SUCCESS', 'Connected to Railway PostgreSQL database (processed_records)');
             
             // Create processed_records table in Railway database if it doesn't exist
@@ -338,7 +425,13 @@ class TwitterBot {
     async loadProcessedIds() {
         try {
             const query = 'SELECT record_id FROM processed_records';
-            const result = await this.railwayClient.query(query);
+            const { client, result } = await this.executeQuery(
+                this.railwayClient, 
+                this.railwayDbConfig, 
+                'Railway', 
+                query
+            );
+            this.railwayClient = client;
             
             this.processedIds = new Set(result.rows.map(row => row.record_id));
             this.log('INFO', `Loaded ${this.processedIds.size} previously processed IDs from Railway database`);
@@ -368,14 +461,14 @@ class TwitterBot {
                     updated_at = NOW()
             `;
             
-            await this.railwayClient.query(query, [
-                recordId, 
-                postedTweetId, 
-                replyToTweetId, 
-                status,
-                contentLength,
-                poiTransaction
-            ]);
+            const { client } = await this.executeQuery(
+                this.railwayClient,
+                this.railwayDbConfig,
+                'Railway',
+                query,
+                [recordId, postedTweetId, replyToTweetId, status, contentLength, poiTransaction]
+            );
+            this.railwayClient = client;
             
             this.processedIds.add(recordId);
             
@@ -487,7 +580,14 @@ class TwitterBot {
                 query: query.trim()
             });
             
-            const result = await this.pgClient.query(query, [utcLastCheckTime]);
+            const { client, result } = await this.executeQuery(
+                this.pgClient,
+                this.mainDbConfig,
+                'Main',
+                query,
+                [utcLastCheckTime]
+            );
+            this.pgClient = client;
             
             // Filter valid records that haven't been processed
             const newRecords = result.rows.filter(record => 
@@ -849,6 +949,23 @@ class TwitterBot {
             await this.processNewRecords();
             
         }, 60000); // 60 seconds
+        
+        // Global error handlers
+        process.on('uncaughtException', (error) => {
+            this.log('ERROR', 'Uncaught Exception', {
+                error: error.message,
+                stack: error.stack
+            });
+            console.error('💥 Uncaught Exception:', error);
+        });
+        
+        process.on('unhandledRejection', (reason, promise) => {
+            this.log('ERROR', 'Unhandled Promise Rejection', {
+                reason: reason instanceof Error ? reason.message : reason,
+                stack: reason instanceof Error ? reason.stack : undefined
+            });
+            console.error('💥 Unhandled Rejection at:', promise, 'reason:', reason);
+        });
         
         // Graceful shutdown
         process.on('SIGINT', async () => {
