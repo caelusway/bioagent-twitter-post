@@ -569,7 +569,6 @@ class TwitterBot {
             const query = `
                 SELECT * FROM twitter_answers 
                 WHERE created_at > $1::timestamp
-                AND poi_transaction IS NOT NULL
                 ORDER BY created_at DESC
                 LIMIT 50
             `;
