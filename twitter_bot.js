@@ -495,9 +495,9 @@ class TwitterBot {
 
     isValidRecord(record) {
         // Must have poi_transaction
-        if (!record.poi_transaction || record.poi_transaction === null) {
-            return false;
-        }
+        //if (!record.poi_transaction || record.poi_transaction === null) {
+          //  return false;
+        //}
         
         // Must have answer
         if (!record.answer || record.answer.trim().length === 0) {
