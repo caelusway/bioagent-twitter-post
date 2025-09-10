@@ -41,7 +41,7 @@ class TwitterBot {
         
         this.rwClient = this.twitterClient.readWrite;
         // Start from a past date to catch existing records, then update to current time
-        this.lastCheckTime = new Date(Date.now() - 5 * 60 * 60 * 1000); // 24 hours ago
+        this.lastCheckTime = new Date(Date.now() - 12 * 60 * 60 * 1000); // 12 hours ago
         this.processedIds = new Set();
         this.isRunning = false;
         
