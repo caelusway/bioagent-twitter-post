@@ -528,54 +528,9 @@ class TwitterBot {
     }
 
     cleanAnswerForTwitter(answer) {
-        // Strategy: Keep ONLY the "Science papers:" section and related content
-        const lines = answer.split('\n');
-        const cleanedLines = [];
-        let keepMode = false;
-
-        for (let i = 0; i < lines.length; i++) {
-            const line = lines[i];
-            const trimmed = line.trim();
-
-            // Start keeping content from "Science papers:" section onwards
-            if (trimmed.toLowerCase().includes('science papers:') ||
-                trimmed.toLowerCase().includes('additional sources:') ||
-                trimmed.toLowerCase().includes('references:')) {
-                keepMode = true;
-                cleanedLines.push(line);
-                continue;
-            }
-
-            // If in keep mode, continue keeping science paper content
-            if (keepMode) {
-                // Keep paper references, DOIs, and related content
-                if (trimmed === '' ||  // Empty lines for formatting
-                    trimmed.includes('10.') ||  // DOI patterns
-                    trimmed.includes('doi:') ||
-                    trimmed.includes('arxiv:') ||
-                    trimmed.includes('pubmed') ||
-                    trimmed.includes('pmid:') ||
-                    trimmed.match(/^[A-Z][a-z]+.*\d{4}/) ||  // Author et al. Year pattern
-                    trimmed.match(/^\d+\./) ||  // Numbered references
-                    trimmed.match(/^[A-Z\s]+ \d/) ||  // Journal patterns
-                    trimmed.includes('http')) {  // URLs to papers
-                    cleanedLines.push(line);
-                } else if (trimmed.length > 0 &&
-                          !trimmed.toLowerCase().includes('molecule proof') &&
-                          !trimmed.toLowerCase().includes('summary:') &&
-                          !trimmed.toLowerCase().includes('conclusion:')) {
-                    // If it's not empty and doesn't look like a new section, keep it as part of references
-                    cleanedLines.push(line);
-                }
-            }
-        }
-
-        // If no science papers section found, return the original answer
-        if (cleanedLines.length === 0) {
-            return answer.trim();
-        }
-
-        return cleanedLines.join('\n').trim();
+        // Strategy: Keep the full answer since we already filtered for scientific content
+        // Only remove extremely long scientific paper lists if needed for length
+        return answer.trim();
     }
 
     async getNewRecords() {
