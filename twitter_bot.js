@@ -498,66 +498,83 @@ class TwitterBot {
         //if (!record.poi_transaction || record.poi_transaction === null) {
           //  return false;
         //}
-        
+
         // Must have answer
         if (!record.answer || record.answer.trim().length === 0) {
             return false;
         }
-        
+
         // Must have tweet_id to reply to
         if (!record.tweet_id || record.tweet_id.trim().length === 0) {
             return false;
         }
-        
-        // Records can contain scientific papers - we'll clean them before posting
+
+        // Must contain science papers/sources/DOI - check for various indicators
+        const answer = record.answer.toLowerCase();
+        const hasSciencePapers = answer.includes('science papers:') ||
+                                answer.includes('additional sources:') ||
+                                answer.includes('references:') ||
+                                answer.includes('doi:') ||
+                                answer.includes('10.') || // DOI pattern
+                                answer.includes('arxiv:') ||
+                                answer.includes('pubmed') ||
+                                answer.includes('pmid:');
+
+        if (!hasSciencePapers) {
+            return false;
+        }
+
         return true;
     }
 
     cleanAnswerForTwitter(answer) {
-        // Strategy: Keep everything EXCEPT "Science papers:" section
+        // Strategy: Keep ONLY the "Science papers:" section and related content
         const lines = answer.split('\n');
         const cleanedLines = [];
-        let skipMode = false;
-        
+        let keepMode = false;
+
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i];
             const trimmed = line.trim();
-            
-            // Start skipping only at "Science papers:" section  
-            if (trimmed.toLowerCase().includes('science papers:')) {
-                skipMode = true;
+
+            // Start keeping content from "Science papers:" section onwards
+            if (trimmed.toLowerCase().includes('science papers:') ||
+                trimmed.toLowerCase().includes('additional sources:') ||
+                trimmed.toLowerCase().includes('references:')) {
+                keepMode = true;
+                cleanedLines.push(line);
                 continue;
             }
-            
-            // If in skip mode, check if we're still in science papers section
-            if (skipMode) {
-                // Stop skipping if we hit an empty line followed by non-paper content
-                if (trimmed === '') {
-                    // Look ahead to see if next non-empty line is still a paper reference
-                    let nextContentIndex = i + 1;
-                    while (nextContentIndex < lines.length && lines[nextContentIndex].trim() === '') {
-                        nextContentIndex++;
-                    }
-                    
-                    if (nextContentIndex < lines.length) {
-                        const nextLine = lines[nextContentIndex].trim();
-                        // If next line doesn't look like a paper reference, stop skipping
-                        if (!nextLine.match(/^[A-Z][a-z]+.*\d{4}\.\d{2}\.\d{2}/) && 
-                            !nextLine.includes('10.') &&
-                            !nextLine.match(/^[A-Z\s]+ \d/)) {
-                            skipMode = false;
-                        }
-                    }
+
+            // If in keep mode, continue keeping science paper content
+            if (keepMode) {
+                // Keep paper references, DOIs, and related content
+                if (trimmed === '' ||  // Empty lines for formatting
+                    trimmed.includes('10.') ||  // DOI patterns
+                    trimmed.includes('doi:') ||
+                    trimmed.includes('arxiv:') ||
+                    trimmed.includes('pubmed') ||
+                    trimmed.includes('pmid:') ||
+                    trimmed.match(/^[A-Z][a-z]+.*\d{4}/) ||  // Author et al. Year pattern
+                    trimmed.match(/^\d+\./) ||  // Numbered references
+                    trimmed.match(/^[A-Z\s]+ \d/) ||  // Journal patterns
+                    trimmed.includes('http')) {  // URLs to papers
+                    cleanedLines.push(line);
+                } else if (trimmed.length > 0 &&
+                          !trimmed.toLowerCase().includes('molecule proof') &&
+                          !trimmed.toLowerCase().includes('summary:') &&
+                          !trimmed.toLowerCase().includes('conclusion:')) {
+                    // If it's not empty and doesn't look like a new section, keep it as part of references
+                    cleanedLines.push(line);
                 }
-                
-                // Skip this line if we're still in science papers mode
-                if (skipMode) continue;
             }
-            
-            // Keep all other content (including Molecule Proof of Invention)
-            cleanedLines.push(line);
         }
-        
+
+        // If no science papers section found, return the original answer
+        if (cleanedLines.length === 0) {
+            return answer.trim();
+        }
+
         return cleanedLines.join('\n').trim();
     }
 
